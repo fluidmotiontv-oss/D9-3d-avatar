@@ -1,0 +1,6 @@
+{
+  "name": "Cyber Dragon Voice Reactive Avatar",
+  "description": "Voice-reactive Cyber Dragon Guardian avatar with generative 432Hz harmonic ambient soundscapes, dynamic voice auto-ducking, infinity flow particle presets, ambient noise-floor intensity scaling, customizable neon themes, live streaming overlay modes, and Blender 3D pipeline export.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dragon 9 // Autonomous Cyber Companion & Transparent Patrol Flight</title>
+  <style>
+    :root {
+      --primary: #06b6d4;
+      --secondary: #3b82f6;
+      --accent: #ec4899;
+      --energy: #22d3ee;
+      --eye-glow: #f43f5e;
+      --bg-glass: rgba(10, 15, 29, 0.72);
+      --border-glass: rgba(6, 182, 212, 0.35);
+      --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #050811;
+      font-family: var(--font-family);
+      color: #e2e8f0;
+      user-select: none;
+    }
+
+    /* -------------------------------------------------------------
+       SIMULATED BACKGROUND CONTENT (Shows click pass-through in flight)
+    ------------------------------------------------------------- */
+    #demo-background-content {
+      position: absolute;
+      inset: 0;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      z-index: 1;
+      background: radial-gradient(circle at 50% 30%, #0d1527 0%, #040711 100%);
+      pointer-events: auto;
+    }
+
+    .demo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 16px;
+    }
+
+    .demo-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .demo-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid var(--primary);
+      color: var(--energy);
+      border-radius: 999px;
+      text-transform: uppercase;
+      font-family: monospace;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .demo-card {
+      background: rgba(18, 24, 43, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .demo-card h3 {
+      font-size: 14px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .demo-card p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #64748b;
+    }
+
+    .demo-btn {
+      align-self: flex-start;
+      padding: 8px 16px;
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.5);
+      color: #93c5fd;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .demo-btn:hover {
+      background: rgba(59, 130, 246, 0.4);
+      color: #fff;
+    }
+
+    /* -------------------------------------------------------------
+       FULLSCREEN OVERLAY CANVAS FOR FLIGHT & PARTICLES
+    ------------------------------------------------------------- */
+    #flight-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 50;
+      pointer-events: none; /* Pointer events pass right through in flight */
+    }
+
+    /* -------------------------------------------------------------
+       1. GLASSMORPHISM WINDOW CONTAINER (Active Box State)
+    ------------------------------------------------------------- */
+    #dragon-companion-window {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(1);
+      width: 480px;
+      height: 580px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-glass);
+      border-radius: 24px;
+      box-shadow: 0 0 50px rgba(6, 182, 212, 0.2), inset 0 0 20px rgba(6, 182, 212, 0.08);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: auto;
+    }
+
+    /* Transition classes for Lifecycle States */
+    #dragon-companion-window.state-cocoon {
+      width: 320px;
+      height: 380px;
+      border-radius: 160px;
+      background: rgba(10, 15, 29, 0.85);
+      box-shadow: 0 0 60px rgba(236, 72, 153, 0.4), inset 0 0 30px rgba(236, 72, 153, 0.3);
+      border-color: rgba(236, 72, 153, 0.6);
+    }
+
+    #dragon-companion-window.state-flight {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.3);
+      pointer-events: none; /* Clicks pass right through */
+    }
+
+    #dragon-companion-window.state-hidden {
+      display: none;
+    }
+
+    /* Window Header */
+    .window-header {
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .window-title-block {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .window-title {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: var(--energy);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .window-subtitle {
+      font-size: 10px;
+      color: #94a3b8;
+      font-family: monospace;
+    }
+
+    .status-pill {
+      font-size: 10px;
+      font-family: monospace;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid var(--primary);
+      color: var(--energy);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--energy);
+      box-shadow: 0 0 8px var(--energy);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    /* Avatar Display Area */
+    .avatar-viewport {
+      flex: 1;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .dragon-svg-element {
+      width: 90%;
+      height: 90%;
+      max-height: 380px;
+      filter: drop-shadow(0 0 20px rgba(6, 182, 212, 0.4));
+      transition: all 0.5s ease-out;
+    }
+
+    /* Articulated Lower Jaw */
+    .jaw-hinge-group {
+      transform-origin: 220px 290px;
+      transition: transform 0.05s ease-out;
+    }
+
+    /* Cocoon Holographic Overlay */
+    #cocoon-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+
+    #dragon-companion-window.state-cocoon #cocoon-overlay {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #dragon-companion-window.state-cocoon .dragon-svg-element {
+      transform: scale(0.65) rotate(-10deg);
+      filter: drop-shadow(0 0 25px rgba(236, 72, 153, 0.6));
+    }
+
+    .cocoon-rings {
+      position: absolute;
+      width: 200px;
+      height: 260px;
+      border-radius: 50%;
+      border: 2px dashed rgba(236, 72, 153, 0.6);
+      animation: spin 12s linear infinite;
+    }
+
+    .cocoon-rings:nth-child(2) {
+      width: 240px;
+      height: 300px;
+      border: 1.5px dotted rgba(6, 182, 212, 0.5);
+      animation: spin-reverse 8s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes spin-reverse {
+      from { transform: rotate(360deg); }
+      to { transform: rotate(0deg); }
+    }
+
+    /* Window Controls Footer */
+    .window-footer {
+      padding: 14px 18px;
+      background: rgba(6, 9, 18, 0.6);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .cyber-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-glass);
+      background: rgba(6, 182, 212, 0.1);
+      color: var(--energy);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .cyber-btn:hover {
+      background: var(--primary);
+      color: #050811;
+      box-shadow: 0 0 15px var(--primary);
+    }
+
+    .cyber-btn.active {
+      background: var(--energy);
+      color: #050811;
+    }
+
+    .idle-telemetry-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      font-family: monospace;
+      color: #64748b;
+    }
+
+    .idle-progress-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      margin: 0 10px;
+      overflow: hidden;
+    }
+
+    .idle-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      transition: width 0.1s linear;
+    }
+
+    /* -------------------------------------------------------------
+       WAKE-UP / RETURN RE-ASSEMBLY HOTSPOT
+    ------------------------------------------------------------- */
+    #home-anchor-hotspot {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 480px;
+      height: 580px;
+      border: 2px dashed rgba(6, 182, 212, 0.2);
+      border-radius: 24px;
+      pointer-events: none;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 40;
+    }
+
+    #home-anchor-hotspot.active {
+      display: flex;
+    }
+
+    .anchor-label {
+      background: rgba(6, 15, 30, 0.85);
+      border: 1px solid var(--primary);
+      color: var(--energy);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+    }
+
+    .anchor-label:hover {
+      background: var(--primary);
+      color: #050811;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIMULATED UNDERLYING CONTENT (Shows transparency & pass-through clicks) -->
+  <div id="demo-background-content">
+    <div class="demo-header">
+      <div class="demo-title">
+        <span>FLUIDMEDIA // KNOWLEDGE HUB</span>
+        <span class="demo-badge">432Hz Audio Mesh</span>
+      </div>
+      <button class="demo-btn" onclick="alert('Underlying Web App Click Handled! (Pass-through Verified)')">
+        Test Underlying Click Target
+      </button>
+    </div>
+
+    <div class="demo-grid">
+      <div class="demo-card">
+        <h3>Autonomous Companion Cycle</h3>
+        <p>This web application features an autonomous companion lifecycle. Move your mouse or speak to interact. When unattended, the Cyber Dragon enters a cocoon state, then patrols the screen on a transparent canvas.</p>
+        <button class="demo-btn" onclick="triggerImmediatePatrol()">Launch Patrol Flight</button>
+      </div>
+
+      <div class="demo-card">
+        <h3>Web Audio 432Hz Engine</h3>
+        <p>Speech formants and RMS volume dynamically articulate the temporomandibular titanium jaw hinge at 60 FPS. All harmonics are tuned to the golden 432Hz series.</p>
+        <button class="demo-btn" onclick="triggerVoiceLine()">Speak 432Hz Voice Line</button>
+      </div>
+
+      <div class="demo-card">
+        <h3>Re-Assembly Mechanics</h3>
+        <p>Move your cursor near the center docking zone or click anywhere during flight to summon the Cyber Dragon back to its glassmorphic host window.</p>
+        <button class="demo-btn" onclick="triggerRecallWindow()">Recall to Home Coordinates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULLSCREEN TRANSPARENT FLIGHT CANVAS (Overlays background content) -->
+  <canvas id="flight-canvas"></canvas>
+
+  <!-- HOME DOCKING ZONE HOTSPOT (Used during flight mode) -->
+  <div id="home-anchor-hotspot">
+    <div class="anchor-label" onclick="triggerRecallWindow()">
+      ⚡ CLICK OR HOVER TO RE-ASSEMBLE DRAGON
+    </div>
+  </div>
+
+  <!-- 1. GLASSMORPHISM ACTIVE WINDOW -->
+  <div id="dragon-companion-window">
+    <!-- Window Header -->
+    <div class="window-header">
+      <div class="window-title-block">
+        <div class="window-title">
+          <span>DRAGON 9 // COMPANION</span>
+        </div>
+        <div class="window-subtitle">432Hz AUDIO-REACTIVE TITAN</div>
+      </div>
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        <span id="companion-status-text">ACTIVE DOCK</span>
+      </div>
+    </div>
+
+    <!-- Avatar Viewport -->
+    <div class="avatar-viewport">
+      <svg class="dragon-svg-element" viewBox="0 0 600 650" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Ambient Orbit Rings -->
+        <circle cx="300" cy="300" r="220" stroke="#06b6d4" stroke-width="1.5" stroke-dasharray="8 6" opacity="0.4" />
+        <circle cx="300" cy="300" r="240" stroke="#3b82f6" stroke-width="1" stroke-dasharray="16 8" opacity="0.3" />
+
+        <!-- Cranium Base Armor -->
+        <path d="M190 120 L300 60 L410 120 L440 240 L380 340 L300 370 L220 340 L160 240 Z" fill="#0f172a" stroke="#06b6d4" stroke-width="3" />
+        
+        <!-- Titanium Horn Conduits -->
+        <path d="M210 110 C160 50 110 40 70 80 C110 110 160 130 190 150 Z" fill="#1e293b" stroke="#ec4899" stroke-width="2.5" />
+        <path d="M390 110 C440 50 490 40 530 80 C490 110 440 130 410 150 Z" fill="#1e293b" stroke="#ec4899" stroke-width="2.5" />
+
+        <!-- Ocular Cyber Lenses -->
+        <circle cx="230" cy="220" r="14" fill="#f43f5e" />
+        <circle cx="370" cy="220" r="14" fill="#f43f5e" />
+        <line x1="230" y1="208" x2="230" y2="232" stroke="#ffffff" stroke-width="3" />
+        <line x1="370" y1="208" x2="370" y2="232" stroke="#ffffff" stroke-width="3" />
+
+        <!-- Upper Snout & Cyber Fangs -->
+        <polygon points="260,200 340,200 360,270 300,300 240,270" fill="#1e1e24" stroke="#06b6d4" stroke-width="2" />
+        <polygon points="270,285 277,305 284,285" fill="#f8fafc" />
+        <polygon points="316,285 323,305 330,285" fill="#f8fafc" />
+
+        <!-- ARTICULATED LOWER JAW GROUP (Driven by Web Audio API) -->
+        <g id="dragon-jaw-hinge" class="jaw-hinge-group">
+          <polygon points="250,295 350,295 330,360 300,380 270,360" fill="#111827" stroke="#3b82f6" stroke-width="2.5" />
+          <polygon points="280,300 286,280 292,300" fill="#f8fafc" />
+          <polygon points="308,300 314,280 320,300" fill="#f8fafc" />
+          <ellipse cx="300" cy="310" rx="32" ry="14" fill="#22d3ee" opacity="0.8" />
+        </g>
+      </svg>
+
+      <!-- Cocoon Holographic Overlay -->
+      <div id="cocoon-overlay">
+        <div class="cocoon-rings"></div>
+        <div class="cocoon-rings"></div>
+        <div style="color: #ec4899; font-weight: bold; font-family: monospace; font-size: 11px; z-index: 10; text-shadow: 0 0 10px #ec4899;">
+          STANDBY COCOON // INACTIVE
+        </div>
+      </div>
+    </div>
+
+    <!-- Window Footer -->
+    <div class="window-footer">
+      <div class="controls-row">
+        <button id="btn-mic-toggle" class="cyber-btn" onclick="toggleMicrophone()">
+          <span>🎙️ MIC SYNC</span>
+        </button>
+        <button class="cyber-btn" onclick="triggerVoiceLine()">
+          <span>🔊 432Hz VOICE</span>
+        </button>
+        <button class="cyber-btn" onclick="triggerImmediatePatrol()">
+          <span>🚀 PATROL FLIGHT</span>
+        </button>
+      </div>
+
+      <div class="idle-telemetry-bar">
+        <span>INACTIVITY TIMER:</span>
+        <div class="idle-progress-track">
+          <div id="idle-progress-bar" class="idle-progress-fill"></div>
+        </div>
+        <span id="idle-countdown-text">15s</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * =========================================================================
+     * DRAGON 9 CYBER COMPANION: COMPLETE STATE MACHINE & WEB AUDIO CONTROLLER
+     * =========================================================================
+     */
+    const CONFIG = {
+      idleTimeoutMs: 12000,      // Inactivity timeout before cocoon transition
+      cocoonDurationMs: 4000,    // Time spent in cocoon before launching flight
+      jawMaxDropPx: 38,
+      jawMaxRotateDeg: 16,
+      speechFormantWeight: 0.65,
+      gain: 2.0,
+      noiseGate: 0.05
+    };
+
+    // State Variables
+    let appState = 'DOCKED'; // 'DOCKED' | 'COCOON' | 'FLIGHT' | 'REASSEMBLING'
+    let lastUserActivity = Date.now();
+    let isMicActive = false;
+    let audioCtx = null;
+    let analyser = null;
+    let audioStream = null;
+    let currentJawOpen = 0;
+
+    // DOM Elements
+    const windowEl = document.getElementById('dragon-companion-window');
+    const statusTextEl = document.getElementById('companion-status-text');
+    const idleProgressEl = document.getElementById('idle-progress-bar');
+    const idleCountdownEl = document.getElementById('idle-countdown-text');
+    const jawEl = document.getElementById('dragon-jaw-hinge');
+    const canvas = document.getElementById('flight-canvas');
+    const ctx = canvas.getContext('2d');
+    const hotspotEl = document.getElementById('home-anchor-hotspot');
+    const btnMic = document.getElementById('btn-mic-toggle');
+
+    // Canvas Resizing
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // -------------------------------------------------------------
+    // 1. WEB AUDIO API & 432Hz JAW MECHANICS
+    // -------------------------------------------------------------
+    async function initAudio() {
+      if (audioCtx && audioCtx.state !== 'closed') return;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContextClass();
+
+      // 432Hz Resonant Filter Node
+      const filter432 = audioCtx.createBiquadFilter();
+      filter432.type = 'peaking';
+      filter432.frequency.setValueAtTime(432, audioCtx.currentTime);
+      filter432.Q.setValueAtTime(3.8, audioCtx.currentTime);
+      filter432.gain.setValueAtTime(6.0, audioCtx.currentTime);
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.5;
+
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const source = audioCtx.createMediaStreamSource(audioStream);
+        source.connect(filter432);
+        filter432.connect(analyser);
+        isMicActive = true;
+        btnMic.classList.add('active');
+        btnMic.innerHTML = '<span>🔴 STOP MIC</span>';
+      } catch (err) {
+        console.warn('Microphone access denied or not available. Using synthetic synthesis.', err);
+      }
+    }
+
+    async function toggleMicrophone() {
+      registerUserActivity();
+      if (!isMicActive) {
+        await initAudio();
+      } else {
+        if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+        if (audioCtx) audioCtx.close();
+        audioCtx = null;
+        analyser = null;
+        isMicActive = false;
+        btnMic.classList.remove('active');
+        btnMic.innerHTML = '<span>🎙️ MIC SYNC</span>';
+      }
+    }
+
+    function processAudioFrame() {
+      if (!analyser) return 0;
+      const bufferLength = analyser.frequencyBinCount;
+      const freqData = new Uint8Array(bufferLength);
+      const timeData = new Uint8Array(bufferLength);
+
+      analyser.getByteFrequencyData(freqData);
+      analyser.getByteTimeDomainData(timeData);
+
+      // RMS
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const norm = (timeData[i] - 128) / 128;
+        sum += norm * norm;
+      }
+      const rms = Math.sqrt(sum / bufferLength) * CONFIG.gain;
+
+      // Speech Formants (300Hz - 2800Hz)
+      const binHz = (audioCtx.sampleRate / 2) / bufferLength;
+      let midSum = 0, midCount = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const freq = i * binHz;
+        if (freq >= 300 && freq <= 2800) {
+          midSum += freqData[i] / 255;
+          midCount++;
+        }
+      }
+      const speechFormant = midCount > 0 ? (midSum / midCount) : 0;
+      const effectiveVol = rms < CONFIG.noiseGate ? 0 : rms;
+      const targetJaw = Math.min(1.0, (effectiveVol * (1 - CONFIG.speechFormantWeight) + speechFormant * CONFIG.speechFormantWeight) * 1.6);
+
+      // Asymmetric spring lerp
+      const lerp = targetJaw > currentJawOpen ? 0.45 : 0.22;
+      currentJawOpen += (targetJaw - currentJawOpen) * lerp;
+      return currentJawOpen;
+    }
+
+    function applyJawTransform(amount) {
+      if (!jawEl) return;
+      const dropPx = amount * CONFIG.jawMaxDropPx;
+      const rotateDeg = amount * CONFIG.jawMaxRotateDeg;
+      jawEl.style.transform = `translate3d(0, ${dropPx.toFixed(2)}px, 0) rotate(${rotateDeg.toFixed(2)}deg)`;
+    }
+
+    // 432Hz Synthetic Voice Speaker
+    function triggerVoiceLine() {
+      registerUserActivity();
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance('Dragon 9 autonomous companion synchronized. All frequencies tuned to 432Hz.');
+        u.pitch = 0.8;
+        u.rate = 0.95;
+
+        let step = 0;
+        const synthTimer = setInterval(() => {
+          step++;
+          const sim = Math.sin(step * 0.7) * 0.45 + 0.45;
+          currentJawOpen = sim;
+          applyJawTransform(sim);
+        }, 60);
+
+        u.onend = () => {
+          clearInterval(synthTimer);
+          currentJawOpen = 0;
+          applyJawTransform(0);
+        };
+        window.speechSynthesis.speak(u);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2. IDLE STATE MACHINE (Unattended Activity Tracking)
+    // -------------------------------------------------------------
+    function registerUserActivity() {
+      lastUserActivity = Date.now();
+      if (appState === 'FLIGHT' || appState === 'COCOON') {
+        triggerRecallWindow();
+      }
+    }
+
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+      window.addEventListener(evt, (e) => {
+        // If in flight mode and user moves cursor near center anchor zone, trigger recall
+        if (appState === 'FLIGHT') {
+          const centerX = window.innerWidth / 2;
+          const centerY = window.innerHeight / 2;
+          const dist = Math.hypot(e.clientX - centerX, e.clientY - centerY);
+          if (dist < 260) {
+            triggerRecallWindow();
+          }
+        }
+        registerUserActivity();
+      }, { passive: true });
+    });
+
+    function updateIdleStateMachine() {
+      const now = Date.now();
+      const elapsed = now - lastUserActivity;
+
+      if (appState === 'DOCKED') {
+        const remaining = Math.max(0, CONFIG.idleTimeoutMs - elapsed);
+        const progress = Math.min(100, (elapsed / CONFIG.idleTimeoutMs) * 100);
+        idleProgressEl.style.width = `${progress}%`;
+        idleCountdownEl.textContent = `${(remaining / 1000).toFixed(0)}s`;
+
+        if (elapsed >= CONFIG.idleTimeoutMs) {
+          enterCocoonState();
+        }
+      } else if (appState === 'COCOON') {
+        idleProgressEl.style.width = '100%';
+        idleCountdownEl.textContent = '0s';
+      }
+    }
+
+    function enterCocoonState() {
+      if (appState !== 'DOCKED') return;
+      appState = 'COCOON';
+      statusTextEl.textContent = 'COCOON MODE';
+      windowEl.className = 'state-cocoon';
+
+      // After cocoon duration, launch transparent patrol flight
+      setTimeout(() => {
+        if (appState === 'COCOON') {
+          launchPatrolFlight();
+        }
+      }, CONFIG.cocoonDurationMs);
+    }
+
+    // -------------------------------------------------------------
+    // 3. TRANSPARENT PATROL FLIGHT & PARTICLE DYNAMICS
+    // -------------------------------------------------------------
+    const miniDragon = {
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+      vx: 2.5,
+      vy: 1.8,
+      angle: 0,
+      targetX: window.innerWidth * 0.7,
+      targetY: window.innerHeight * 0.3,
+      wings: 0,
+      trail: [],
+      speed: 3.5
+    };
+
+    function triggerImmediatePatrol() {
+      registerUserActivity();
+      appState = 'COCOON';
+      windowEl.className = 'state-cocoon';
+      setTimeout(() => launchPatrolFlight(), 600);
+    }
+
+    function launchPatrolFlight() {
+      appState = 'FLIGHT';
+      statusTextEl.textContent = 'PATROL FLIGHT';
+      windowEl.className = 'state-flight';
+      hotspotEl.classList.add('active');
+
+      miniDragon.x = window.innerWidth / 2;
+      miniDragon.y = window.innerHeight / 2;
+      miniDragon.trail = [];
+    }
+
+    function triggerRecallWindow() {
+      if (appState === 'DOCKED' || appState === 'REASSEMBLING') return;
+      appState = 'REASSEMBLING';
+      statusTextEl.textContent = 'RE-ASSEMBLING';
+
+      // Dragon flies back to center coordinates
+      const returnInterval = setInterval(() => {
+        const dx = (window.innerWidth / 2) - miniDragon.x;
+        const dy = (window.innerHeight / 2) - miniDragon.y;
+        const dist = Math.hypot(dx, dy);
+
+        miniDragon.x += dx * 0.15;
+        miniDragon.y += dy * 0.15;
+        miniDragon.angle = Math.atan2(dy, dx);
+
+        if (dist < 20) {
+          clearInterval(returnInterval);
+          appState = 'DOCKED';
+          statusTextEl.textContent = 'ACTIVE DOCK';
+          windowEl.className = '';
+          hotspotEl.classList.remove('active');
+          lastUserActivity = Date.now();
+        }
+      }, 1000 / 60);
+    }
+
+    // Ambient Energy Dust Particles (Docked Mode)
+    const ambientDust = [];
+    const DUST_COUNT = 45;
+    const GLYPHS = ['0', '1', '432', 'Δ', '9', '⟡', '::', '◈'];
+
+    for (let i = 0; i < DUST_COUNT; i++) {
+      ambientDust.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -0.2 - Math.random() * 0.4,
+        size: 1.5 + Math.random() * 2.5,
+        alpha: 0.2 + Math.random() * 0.6,
+        color: i % 3 === 0 ? '#22d3ee' : i % 3 === 1 ? '#ec4899' : '#06b6d4',
+        type: i % 6 === 0 ? 'glyph' : 'mote',
+        glyph: GLYPHS[i % GLYPHS.length],
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 4. FLIGHT RENDER LOOP (Transparent Canvas Overlay)
+    // -------------------------------------------------------------
+    let flightTime = 0;
+
+    function renderFlightCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Render Ambient Energy Dust in Docked mode
+      if (appState === 'DOCKED' || appState === 'COCOON') {
+        const noiseFloorPulse = 0.05 + currentJawOpen * 0.8 + (Math.sin(flightTime * 2) * 0.03 + 0.04);
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+
+        for (let i = 0; i < ambientDust.length; i++) {
+          const d = ambientDust[i];
+          d.phase += 0.03;
+          d.x += d.vx;
+          d.y += d.vy;
+
+          if (d.y < -20) {
+            d.y = canvas.height + 10;
+            d.x = (canvas.width / 2) + (Math.random() - 0.5) * 450;
+          }
+          if (d.x < 0 || d.x > canvas.width) d.x = canvas.width / 2;
+
+          const dynamicAlpha = Math.min(1.0, (d.alpha + noiseFloorPulse * 0.6));
+          const dynamicSize = d.size * (1 + noiseFloorPulse * 0.5);
+
+          ctx.globalAlpha = dynamicAlpha;
+
+          if (d.type === 'glyph') {
+            ctx.font = `${Math.round(dynamicSize * 2.5)}px monospace`;
+            ctx.fillStyle = d.color;
+            ctx.shadowColor = d.color;
+            ctx.shadowBlur = 6;
+            ctx.fillText(d.glyph, d.x, d.y);
+          } else {
+            ctx.fillStyle = d.color;
+            ctx.shadowColor = d.color;
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, dynamicSize, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      if (appState === 'FLIGHT' || appState === 'REASSEMBLING') {
+        flightTime += 0.03;
+
+        // Autonomous Spline / Lissajous Path Navigation
+        if (appState === 'FLIGHT') {
+          miniDragon.targetX = (canvas.width / 2) + Math.sin(flightTime * 0.8) * (canvas.width * 0.38);
+          miniDragon.targetY = (canvas.height / 2) + Math.cos(flightTime * 1.2) * (canvas.height * 0.32);
+
+          const dx = miniDragon.targetX - miniDragon.x;
+          const dy = miniDragon.targetY - miniDragon.y;
+          const targetAngle = Math.atan2(dy, dx);
+
+          // Smooth turning
+          miniDragon.angle += (targetAngle - miniDragon.angle) * 0.08;
+          miniDragon.x += Math.cos(miniDragon.angle) * miniDragon.speed;
+          miniDragon.y += Math.sin(miniDragon.angle) * miniDragon.speed;
+        }
+
+        // Update Particle Trail
+        miniDragon.trail.push({ x: miniDragon.x, y: miniDragon.y, alpha: 1.0, size: 8 });
+        if (miniDragon.trail.length > 32) miniDragon.trail.shift();
+
+        // 1. Draw Glowing Plasma Particle Ribbon
+        for (let i = 0; i < miniDragon.trail.length; i++) {
+          const pt = miniDragon.trail[i];
+          pt.alpha *= 0.94;
+          const ratio = i / miniDragon.trail.length;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, (1 - ratio) * 12 + 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(6, 182, 212, ${pt.alpha * 0.4})`;
+          ctx.shadowColor = '#06b6d4';
+          ctx.shadowBlur = 15;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 2. Draw Mini Cyber Dragon Entity
+        ctx.save();
+        ctx.translate(miniDragon.x, miniDragon.y);
+        ctx.rotate(miniDragon.angle);
+
+        // Holographic Halo
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 36, 18, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Cyber Dragon Wings Flapping
+        const flap = Math.sin(flightTime * 8) * 22;
+        ctx.fillStyle = 'rgba(236, 72, 153, 0.7)';
+        ctx.beginPath();
+        ctx.moveTo(-10, 0);
+        ctx.lineTo(15, -28 - flap);
+        ctx.lineTo(25, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(-10, 0);
+        ctx.lineTo(15, 28 + flap);
+        ctx.lineTo(25, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // Mecha Body
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(32, 0);
+        ctx.lineTo(10, -12);
+        ctx.lineTo(-24, -6);
+        ctx.lineTo(-34, 0);
+        ctx.lineTo(-24, 6);
+        ctx.lineTo(10, 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Glowing Ocular Lens
+        ctx.fillStyle = '#f43f5e';
+        ctx.shadowColor = '#f43f5e';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(18, -4, 3, 0, Math.PI * 2);
+        ctx.arc(18, 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // Audio analysis in main window mode
+      if (appState === 'DOCKED') {
+        const jaw = processAudioFrame();
+        applyJawTransform(jaw);
+      }
+
+      updateIdleStateMachine();
+      requestAnimationFrame(renderFlightCanvas);
+    }
+
+    // Start 60FPS loop
+    requestAnimationFrame(renderFlightCanvas);
+  </script>
+</body>
+</html>
